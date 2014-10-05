@@ -135,6 +135,11 @@ class SubscribersAction extends GalleryAction
     function showSections()
     {
         parent::showSections();
+        $cloud = new SubscribersPeopleTagCloudSection($this);
+        $cloud->show();
+
+        $cloud2 = new SubscribersPeopleSelfTagCloudSection($this);
+        $cloud2->show();
     }
 }
 

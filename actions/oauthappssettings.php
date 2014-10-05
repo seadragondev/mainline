@@ -31,8 +31,8 @@ if (!defined('STATUSNET') && !defined('LACONICA')) {
     exit(1);
 }
 
+require_once INSTALLDIR . '/lib/settingsaction.php';
 require_once INSTALLDIR . '/lib/applicationlist.php';
-require_once INSTALLDIR . '/lib/statusnetoauthstore.php';
 
 /**
  * Show a user's registered OAuth applications

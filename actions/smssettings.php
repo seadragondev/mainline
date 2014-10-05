@@ -31,6 +31,8 @@ if (!defined('STATUSNET') && !defined('LACONICA')) {
     exit(1);
 }
 
+require_once INSTALLDIR.'/lib/connectsettingsaction.php';
+
 /**
  * Settings for SMS
  *
@@ -42,8 +44,7 @@ if (!defined('STATUSNET') && !defined('LACONICA')) {
  *
  * @see      SettingsAction
  */
-
-class SmssettingsAction extends SettingsAction
+class SmssettingsAction extends ConnectSettingsAction
 {
     /**
      * Title of the page
@@ -246,7 +247,6 @@ class SmssettingsAction extends SettingsAction
 
         $token = $this->trimmed('token');
         if (!$token || $token != common_session_token()) {
-            // TRANS: Client error displayed when the session token does not match or is not given.
             $this->showForm(_('There was a problem with your session token. '.
                               'Try again, please.'));
             return;
@@ -410,7 +410,7 @@ class SmssettingsAction extends SettingsAction
         if (!$result) {
             common_log_db_error($confirm, 'DELETE', __FILE__);
             // TRANS: Server error thrown on database error canceling SMS phone number confirmation.
-            $this->serverError(_('Could not delete SMS confirmation.'));
+            $this->serverError(_('Could not delete email confirmation.'));
             return;
         }
 

@@ -44,8 +44,21 @@ require_once INSTALLDIR.'/lib/widget.php';
  *
  * @see      Widget
  */
-class LoginGroupNav extends Menu
+class LoginGroupNav extends Widget
 {
+    var $action = null;
+
+    /**
+     * Construction
+     *
+     * @param Action $action current action, used for output
+     */
+    function __construct($action=null)
+    {
+        parent::__construct($action);
+        $this->action = $action;
+    }
+
     /**
      * Show the menu
      *
@@ -66,8 +79,7 @@ class LoginGroupNav extends Menu
                                     _('Login with a username and password'),
                                     $action_name === 'login');
 
-            if (!common_logged_in() &&
-                !(common_config('site','closed') || common_config('site','inviteonly'))) {
+            if (!(common_config('site','closed') || common_config('site','inviteonly'))) {
                 $this->action->menuItem(common_local_url('register'),
                                         // TRANS: Menu item for registering with the StatusNet site.
                                         _m('MENU','Register'),

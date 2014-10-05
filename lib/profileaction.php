@@ -23,7 +23,7 @@
  * @package   StatusNet
  * @author    Evan Prodromou <evan@status.net>
  * @author    Sarven Capadisli <csarven@status.net>
- * @copyright 2008-2011 StatusNet, Inc.
+ * @copyright 2008-2009 StatusNet, Inc.
  * @license   http://www.fsf.org/licensing/licenses/agpl-3.0.html GNU Affero General Public License version 3.0
  * @link      http://status.net/
  */
@@ -46,7 +46,7 @@ require_once INSTALLDIR.'/lib/groupminilist.php';
  * @license  http://www.fsf.org/licensing/licenses/agpl-3.0.html GNU Affero General Public License version 3.0
  * @link     http://status.net/
  */
-class ProfileAction extends Action
+class ProfileAction extends OwnerDesignAction
 {
     var $page    = null;
     var $profile = null;
@@ -81,16 +81,9 @@ class ProfileAction extends Action
         $this->profile = $this->user->getProfile();
 
         if (!$this->profile) {
-            // TRANS: Error message displayed when referring to a user without a profile.
+            // TRANS: Server error displayed when calling a profile action while the specified user does not have a profile.
             $this->serverError(_('User has no profile.'));
             return false;
-        }
-
-        $user = common_current_user();
-
-        if ($this->profile->hasRole(Profile_role::SILENCED) &&
-            (empty($user) || !$user->hasRight(Right::SILENCEUSER))) {
-            throw new ClientException(_('This profile has been silenced by site moderators'), 403);
         }
 
         $this->tag = $this->trimmed('tag');
@@ -104,7 +97,6 @@ class ProfileAction extends Action
         $this->showSubscriptions();
         $this->showSubscribers();
         $this->showGroups();
-        $this->showLists();
         $this->showStatistics();
     }
 
@@ -132,9 +124,7 @@ class ProfileAction extends Action
         if (Event::handle('StartShowSubscriptionsMiniList', array($this))) {
             $this->elementStart('h2');
             // TRANS: H2 text for user subscription statistics.
-            $this->statsSectionLink('subscriptions', _('Following'));
-            $this->text(' ');
-            $this->text($this->profile->subscriptionCount());
+            $this->statsSectionLink('subscriptions', _('Subscriptions'));
             $this->elementEnd('h2');
 
             $cnt = 0;
@@ -146,6 +136,13 @@ class ProfileAction extends Action
                     // TRANS: Text for user subscription statistics if the user has no subscriptions.
                     $this->element('p', null, _('(None)'));
                 }
+            }
+
+            if ($cnt > PROFILES_PER_MINILIST) {
+                $this->elementStart('p');
+                // TRANS: Text for user subscription statistics if user has more subscriptions than displayed.
+                $this->statsSectionLink('subscriptions', _('All subscriptions'), 'more');
+                $this->elementEnd('p');
             }
 
             Event::handle('EndShowSubscriptionsMiniList', array($this));
@@ -164,9 +161,7 @@ class ProfileAction extends Action
 
             $this->elementStart('h2');
             // TRANS: H2 text for user subscriber statistics.
-            $this->statsSectionLink('subscribers', _('Followers'));
-            $this->text(' ');
-            $this->text($this->profile->subscriberCount());
+            $this->statsSectionLink('subscribers', _('Subscribers'));
             $this->elementEnd('h2');
 
             $cnt = 0;
@@ -178,6 +173,13 @@ class ProfileAction extends Action
                     // TRANS: Text for user subscriber statistics if user has no subscribers.
                     $this->element('p', null, _('(None)'));
                 }
+            }
+
+            if ($cnt > PROFILES_PER_MINILIST) {
+                $this->elementStart('p');
+                // TRANS: Text for user subscription statistics if user has more subscribers than displayed.
+                $this->statsSectionLink('subscribers', _('All subscribers'), 'more');
+                $this->elementEnd('p');
             }
 
             Event::handle('EndShowSubscribersMiniList', array($this));
@@ -216,6 +218,27 @@ class ProfileAction extends Action
                 // TRANS: Label for user statistics.
                 'label' => _('Member since'),
                 'value' => date('j M Y', strtotime($profile->created))
+            ),
+            array(
+                'id' => 'subscriptions',
+                // TRANS: Label for user statistics.
+                'label' => _('Subscriptions'),
+                'link' => common_local_url('subscriptions', $actionParams),
+                'value' => $profile->subscriptionCount(),
+            ),
+            array(
+                'id' => 'subscribers',
+                // TRANS: Label for user statistics.
+                'label' => _('Subscribers'),
+                'link' => common_local_url('subscribers', $actionParams),
+                'value' => $profile->subscriberCount(),
+            ),
+            array(
+                'id' => 'groups',
+                // TRANS: Label for user statistics.
+                'label' => _('Groups'),
+                'link' => common_local_url('usergroups', $actionParams),
+                'value' => $profile->getGroups()->N,
             ),
             array(
                 'id' => 'notices',
@@ -265,8 +288,6 @@ class ProfileAction extends Action
             $this->elementStart('h2');
             // TRANS: H2 text for user group membership statistics.
             $this->statsSectionLink('usergroups', _('Groups'));
-            $this->text(' ');
-            $this->text($this->profile->getGroups(0, null)->N);
             $this->elementEnd('h2');
 
             if ($groups) {
@@ -278,64 +299,16 @@ class ProfileAction extends Action
                 }
             }
 
+            if ($cnt > GROUPS_PER_MINILIST) {
+                $this->elementStart('p');
+                // TRANS: Text for user group membership statistics if user has more subscriptions than displayed.
+                $this->statsSectionLink('usergroups', _('All groups'), 'more');
+                $this->elementEnd('p');
+            }
+
             Event::handle('EndShowGroupsMiniList', array($this));
         }
             $this->elementEnd('div');
-    }
-
-    function showLists()
-    {
-        $cur = common_current_user();
-
-        $lists = $this->profile->getLists($cur);
-
-        if ($lists->N > 0) {
-            $this->elementStart('div', array('id' => 'entity_lists',
-                                             'class' => 'section'));
-
-            if (Event::handle('StartShowListsMiniList', array($this))) {
-
-                $url = common_local_url('peopletagsbyuser',
-                                        array('nickname' => $this->profile->nickname));
-
-                $this->elementStart('h2');
-                $this->element('a',
-                               array('href' => $url),
-                               // TRANS: H2 text for user list membership statistics.
-                               _('Lists'));
-                $this->text(' ');
-                $this->text($lists->N);
-                $this->elementEnd('h2');
-
-                $this->elementStart('ul');
-
-
-                $first = true;
-
-                while ($lists->fetch()) {
-                    if (!empty($lists->mainpage)) {
-                        $url = $lists->mainpage;
-                    } else {
-                        $url = common_local_url('showprofiletag',
-                                                array('tagger' => $this->profile->nickname,
-                                                      'tag'    => $lists->tag));
-                    }
-                    if (!$first) {
-                        $this->text(', ');
-                    } else {
-                        $first = false;
-                    }
-
-                    $this->element('a', array('href' => $url),
-                                   $lists->tag);
-                }
-
-                $this->elementEnd('ul');
-
-                Event::handle('EndShowListsMiniList', array($this));
-            }
-            $this->elementEnd('div');
-        }
     }
 }
 

@@ -80,6 +80,12 @@ class GroupsAction extends Action
         $this->showPage();
     }
 
+    function showLocalNav()
+    {
+        $nav = new PublicGroupNav($this);
+        $nav->show();
+    }
+
     function showPageNotice()
     {
         $notice =

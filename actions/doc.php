@@ -147,87 +147,80 @@ class DocAction extends Action
     {
         if (Event::handle('StartLoadDoc', array(&$this->title, &$this->output))) {
 
-            $paths = DocFile::defaultPaths();
+            $this->filename = $this->getFilename();
 
-            $docfile = DocFile::forTitle($this->title, $paths);
-
-            if (empty($docfile)) {
+            if (empty($this->filename)) {
                 // TRANS: Client exception thrown when requesting a document from the documentation that does not exist.
                 // TRANS: %s is the non-existing document.
                 throw new ClientException(sprintf(_('No such document "%s".'), $this->title), 404);
             }
 
-            $this->output = $docfile->toHTML();
+            $c = file_get_contents($this->filename);
+
+            $this->output = common_markup_to_html($c);
 
             Event::handle('EndLoadDoc', array($this->title, &$this->output));
         }
     }
 
-    function showLocalNav()
+    function getFilename()
     {
-        $menu = new DocNav($this);
-        $menu->show();
-    }
-}
+        $localDef = null;
+        $local    = null;
 
-class DocNav extends Menu
-{
-    function show()
-    {
-        $stub = new HomeStubNav($this->action);
-        $this->submenu(_m('MENU','Home'), $stub);
+        $site = StatusNet::currentSite();
 
-        $docs = new DocListNav($this->action);
-        $this->submenu(_m('MENU','Docs'), $docs);
-    }
-}
+        if (!empty($site) && file_exists(INSTALLDIR.'/local/doc-src/'.$site.'/'.$this->title)) {
+            $localDef = INSTALLDIR.'/local/doc-src/'.$site.'/'.$this->title;
 
-class DocListNav extends Menu
-{
-    function getItems()
-    {
-        $items = array();
+            $local = glob(INSTALLDIR.'/local/doc-src/'.$site.'/'.$this->title.'.*');
+            if ($local === false) {
+                // Some systems return false, others array(), if dir didn't exist.
+                $local = array();
+            }
+        } else {
+            if (file_exists(INSTALLDIR.'/local/doc-src/'.$this->title)) {
+                $localDef = INSTALLDIR.'/local/doc-src/'.$this->title;
+            }
 
-        if (Event::handle('StartDocsMenu', array(&$items))) {
-
-            $items = array(array('doc',
-                                 array('title' => 'help'),
-                                 _m('MENU', 'Help'),
-                                 _('Getting started'),
-                                 'nav_doc_help'),
-                           array('doc',
-                                 array('title' => 'about'),
-                                 _m('MENU', 'About'),
-                                 _('About this site'),
-                                 'nav_doc_about'),
-                           array('doc',
-                                 array('title' => 'faq'),
-                                 _m('MENU', 'FAQ'),
-                                 _('Frequently asked questions'),
-                                 'nav_doc_faq'),
-                           array('doc',
-                                 array('title' => 'contact'),
-                                 _m('MENU', 'Contact'),
-                                 _('Contact info'),
-                                 'nav_doc_contact'),
-                           array('doc',
-                                 array('title' => 'tags'),
-                                 _m('MENU', 'Tags'),
-                                 _('Using tags'),
-                                 'nav_doc_tags'),
-                           array('doc',
-                                 array('title' => 'groups'),
-                                 _m('MENU', 'Groups'),
-                                 _('Using groups'),
-                                 'nav_doc_groups'),
-                           array('doc',
-                                 array('title' => 'api'),
-                                 _m('MENU', 'API'),
-                                 _('RESTful API'),
-                                 'nav_doc_api'));
-
-            Event::handle('EndDocsMenu', array(&$items));
+            $local = glob(INSTALLDIR.'/local/doc-src/'.$this->title.'.*');
+            if ($local === false) {
+                $local = array();
+            }
         }
-        return $items;
+
+        if (count($local) || isset($localDef)) {
+            return $this->negotiateLanguage($local, $localDef);
+        }
+
+        if (file_exists(INSTALLDIR.'/doc-src/'.$this->title)) {
+            $distDef = INSTALLDIR.'/doc-src/'.$this->title;
+        }
+
+        $dist = glob(INSTALLDIR.'/doc-src/'.$this->title.'.*');
+        if ($dist === false) {
+            $dist = array();
+        }
+
+        if (count($dist) || isset($distDef)) {
+            return $this->negotiateLanguage($dist, $distDef);
+        }
+
+        return null;
+    }
+
+    function negotiateLanguage($filenames, $defaultFilename=null)
+    {
+        // XXX: do this better
+
+        $langcode = common_language();
+
+        foreach ($filenames as $filename) {
+            if (preg_match('/\.'.$langcode.'$/', $filename)) {
+                return $filename;
+            }
+        }
+
+        return $defaultFilename;
     }
 }

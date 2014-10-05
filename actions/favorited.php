@@ -164,6 +164,19 @@ class FavoritedAction extends Action
     }
 
     /**
+     * Local navigation
+     *
+     * This page is part of the public group, so show that.
+     *
+     * @return void
+     */
+    function showLocalNav()
+    {
+        $nav = new PublicGroupNav($this);
+        $nav->show();
+    }
+
+    /**
      * Content area
      *
      * Shows the list of popular notices
@@ -172,8 +185,11 @@ class FavoritedAction extends Action
      */
     function showContent()
     {
-        $stream = new PopularNoticeStream(Profile::current());
-        $notice = $stream->getNotices(($this->page-1)*NOTICES_PER_PAGE, NOTICES_PER_PAGE+1);
+        $pop = new Popularity();
+        $pop->offset = ($this->page - 1) * NOTICES_PER_PAGE;
+        $pop->limit  = NOTICES_PER_PAGE;
+        $pop->expiry = 600;
+        $notice = $pop->getNotices();
 
         $nl = new NoticeList($notice, $this);
 
