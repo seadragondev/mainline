@@ -43,7 +43,7 @@ if (!defined('STATUSNET') && !defined('LACONICA')) {
  * @see      Widget
  */
 
-class SettingsAction extends Action
+class SettingsAction extends CurrentUserDesignAction
 {
     /**
      * A message for the user.
@@ -69,7 +69,6 @@ class SettingsAction extends Action
     {
         parent::handle($args);
         if (!common_logged_in()) {
-            // TRANS: Error message displayed when trying to perform an action that requires a logged in user.
             $this->clientError(_('Not logged in.'));
             return;
         } else if (!common_is_real_login()) {
@@ -151,32 +150,4 @@ class SettingsAction extends Action
         return '';
     }
 
-    /**
-     * Show the local navigation menu
-     *
-     * This is the same for all settings, so we show it here.
-     *
-     * @return void
-     */
-
-    function showLocalNav()
-    {
-        $menu = new SettingsNav($this);
-        $menu->show();
-    }
-
-    /**
-     * Show notice form.
-     *
-     * @return nothing
-     */
-
-    function showNoticeForm()
-    {
-        return;
-    }
-
-    function showProfileBlock()
-    {
-    }
 }

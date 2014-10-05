@@ -44,34 +44,30 @@ define('INSTALLDIR', dirname(__FILE__));
 define('STATUSNET', true);
 define('LACONICA', true); // compatibility
 
+require_once INSTALLDIR . '/lib/common.php';
+
+register_shutdown_function('common_log_perf_counters');
+
 $user = null;
 $action = null;
 
 function getPath($req)
 {
-    $p = null;
-
     if ((common_config('site', 'fancy') || !array_key_exists('PATH_INFO', $_SERVER))
         && array_key_exists('p', $req)
     ) {
-        $p = $req['p'];
+        return $req['p'];
     } else if (array_key_exists('PATH_INFO', $_SERVER)) {
         $path = $_SERVER['PATH_INFO'];
         $script = $_SERVER['SCRIPT_NAME'];
         if (substr($path, 0, mb_strlen($script)) == $script) {
-            $p = substr($path, mb_strlen($script) + 1);
+            return substr($path, mb_strlen($script));
         } else {
-            $p = $path;
+            return $path;
         }
     } else {
-        $p = null;
+        return null;
     }
-
-    // Trim all initial '/'
-
-    $p = ltrim($p, '/');
-
-    return $p;
 }
 
 /**
@@ -81,67 +77,51 @@ function getPath($req)
  */
 function handleError($error)
 {
-    try {
-
-        if ($error->getCode() == DB_DATAOBJECT_ERROR_NODATA) {
-            return;
-        }
-
-        $logmsg = "PEAR error: " . $error->getMessage();
-        if ($error instanceof PEAR_Exception && common_config('site', 'logdebug')) {
-            $logmsg .= " : ". $error->toText();
-        }
-        // DB queries often end up with a lot of newlines; merge to a single line
-        // for easier grepability...
-        $logmsg = str_replace("\n", " ", $logmsg);
-        common_log(LOG_ERR, $logmsg);
-
-        // @fixme backtrace output should be consistent with exception handling
-        if (common_config('site', 'logdebug')) {
-            $bt = $error->getTrace();
-            foreach ($bt as $n => $line) {
-                common_log(LOG_ERR, formatBacktraceLine($n, $line));
-            }
-        }
-        if ($error instanceof DB_DataObject_Error
-            || $error instanceof DB_Error
-            || ($error instanceof PEAR_Exception && $error->getCode() == -24)
-        ) {
-            //If we run into a DB error, assume we can't connect to the DB at all
-            //so set the current user to null, so we don't try to access the DB
-            //while rendering the error page.
-            global $_cur;
-            $_cur = null;
-
-            $msg = sprintf(
-                // TRANS: Database error message.
-                _('The database for %1$s is not responding correctly, '.
-                  'so the site will not work properly. '.
-                  'The site admins probably know about the problem, '.
-                  'but you can contact them at %2$s to make sure. '.
-                  'Otherwise, wait a few minutes and try again.'
-                ),
-                common_config('site', 'name'),
-                common_config('site', 'email')
-            );
-
-            $dac = new DBErrorAction($msg, 500);
-            $dac->showPage();
-        } else {
-            $sac = new ServerErrorAction($error->getMessage(), 500, $error);
-            $sac->showPage();
-        }
-
-    } catch (Exception $e) {
-        // TRANS: Error message.
-        echo _('An error occurred.');
+    if ($error->getCode() == DB_DATAOBJECT_ERROR_NODATA) {
+        return;
     }
+
+    $logmsg = "PEAR error: " . $error->getMessage();
+    if (common_config('site', 'logdebug')) {
+        $logmsg .= " : ". $error->getDebugInfo();
+    }
+    // DB queries often end up with a lot of newlines; merge to a single line
+    // for easier grepability...
+    $logmsg = str_replace("\n", " ", $logmsg);
+    common_log(LOG_ERR, $logmsg);
+
+    // @fixme backtrace output should be consistent with exception handling
+    if (common_config('site', 'logdebug')) {
+        $bt = $error->getBacktrace();
+        foreach ($bt as $n => $line) {
+            common_log(LOG_ERR, formatBacktraceLine($n, $line));
+        }
+    }
+    if ($error instanceof DB_DataObject_Error
+        || $error instanceof DB_Error
+    ) {
+        $msg = sprintf(
+            _(
+                'The database for %s isn\'t responding correctly, '.
+                'so the site won\'t work properly. '.
+                'The site admins probably know about the problem, '.
+                'but you can contact them at %s to make sure. '.
+                'Otherwise, wait a few minutes and try again.'
+            ),
+            common_config('site', 'name'),
+            common_config('site', 'email')
+        );
+    } else {
+        $msg = _(
+            'An important error occured, probably related to email setup. '.
+            'Check logfiles for more info..'
+        );
+    }
+
+    $dac = new DBErrorAction($msg, 500);
+    $dac->showPage();
     exit(-1);
 }
-
-set_exception_handler('handleError');
-
-require_once INSTALLDIR . '/lib/common.php';
 
 /**
  * Format a backtrace line for debug output roughly like debug_print_backtrace() does.
@@ -181,24 +161,15 @@ function setupRW()
 
     static $alwaysRW = array('session', 'remember_me');
 
-    $rwdb = $config['db']['database'];
+    // We ensure that these tables always are used
+    // on the master DB
 
-    if (Event::handle('StartReadWriteTables', array(&$alwaysRW, &$rwdb))) {
+    $config['db']['database_rw'] = $config['db']['database'];
+    $config['db']['ini_rw'] = INSTALLDIR.'/classes/statusnet.ini';
 
-        // We ensure that these tables always are used
-        // on the master DB
-
-        $config['db']['database_rw'] = $rwdb;
-        $config['db']['ini_rw'] = INSTALLDIR.'/classes/statusnet.ini';
-
-        foreach ($alwaysRW as $table) {
-            $config['db']['table_'.$table] = 'rw';
-        }
-
-        Event::handle('EndReadWriteTables', array($alwaysRW, $rwdb));
+    foreach ($alwaysRW as $table) {
+        $config['db']['table_'.$table] = 'rw';
     }
-
-    return;
 }
 
 function checkMirror($action_obj, $args)
@@ -266,15 +237,19 @@ function main()
 
     if (!_have_config()) {
         $msg = sprintf(
-            // TRANS: Error message displayed when there is no StatusNet configuration file.
-            _("No configuration file found. Try running ".
-              "the installation program first."
+            _(
+                "No configuration file found. Try running ".
+                "the installation program first."
             )
         );
         $sac = new ServerErrorAction($msg);
         $sac->showPage();
         return;
     }
+
+    // For database errors
+
+    PEAR::setErrorHandling(PEAR_ERROR_CALLBACK, 'handleError');
 
     // Make sure RW database is setup
 
@@ -297,17 +272,8 @@ function main()
     $args = $r->map($path);
 
     if (!$args) {
-        // TRANS: Error message displayed when trying to access a non-existing page.
         $cac = new ClientErrorAction(_('Unknown page'), 404);
         $cac->showPage();
-        return;
-    }
-
-    $site_ssl = common_config('site', 'ssl');
-
-    // If the request is HTTP and it should be HTTPS...
-    if ($site_ssl != 'never' && !StatusNet::isHTTPS() && common_is_sensitive($args['action'])) {
-        common_redirect(common_local_url($args['action'], $args));
         return;
     }
 
@@ -352,7 +318,6 @@ function main()
     $action_class = ucfirst($action).'Action';
 
     if (!class_exists($action_class)) {
-        // TRANS: Error message displayed when trying to perform an undefined action.
         $cac = new ClientErrorAction(_('Unknown action'), 404);
         $cac->showPage();
     } else {
